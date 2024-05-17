@@ -2,13 +2,19 @@
 #define SMALLSH_H
 
 #include <stdio.h>
-#include <stdlib.h>
 #include <string.h>
-#include <ctype.h>
 #include <dirent.h>
-#include <sys/stat.h>
-#include <sys/stat.h>
+#include <unistd.h>
+#include <stdlib.h>
+
+/*
 #include <time.h>
+#include <sys/stat.h>
+#include <ctype.h>
+*/
 
-
+void start();
+void exitProgram();
+void getCD(char *path);
+void getStatus();
 #endif
