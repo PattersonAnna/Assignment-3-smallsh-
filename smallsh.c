@@ -5,12 +5,43 @@ void exitProgram(){
     exit(EXIT_SUCCESS);
 }
 
-void getCD(char *userInput){
-    printf("%s, in getCD\n", userInput);
-    if(chdir(userInput) == 0){
-        printf("success");
+// void getCD(char *userInput){
+//     char cwd[2049];
+//     getcwd(cwd, sizeof(cwd));
+//     char *home = strtok(cwd, "/");
+//     char *token = strtok(userInput, " ");
+//     token = strtok(NULL, " ");
+
+//     if(token  == NULL){
+//         chdir(home);
+//     }else{
+//         chdir(token);
+//     }
+
+
+//     printf("%s, in getCD\n", userInput);
+//     if(chdir(userInput) == 0){
+//         printf("success");
+//     }
+//     start();
+// }
+
+void getCD(char *userInput) {
+    char cwd[2049];
+    char *token = strtok(userInput, " ");
+    token = strtok(NULL, " ");
+    char *home = getcwd(cwd, sizeof(cwd));
+
+    if (token == NULL) {
+        for(int i = 1; i < 4; i++){
+            printf("%d", i);
+            home = strtok(home, "/");
+        }
+        printf("%s", home);
+        (chdir(home) == 0);
+        
     }
-    start();
+    (chdir(token) == 0); 
 }
 
 void getStatus(){
@@ -24,24 +55,34 @@ void start(){
 
     do{
         printf(":");
-        scanf("%2048s", userInput);
+        fgets(userInput, sizeof(userInput), stdin);
+
+        // Remove trailing newline character if present
+        size_t len = strlen(userInput);
+        if (len > 0 && userInput[len - 1] == '\n') {
+            userInput[len - 1] = '\0';
+        }
 
         if(strcmp(userInput, "exit") == 0){
             exitProgram();
-        }else if(strcmp(userInput, "status") == 0){
+        }
+        if(strcmp(userInput, "status") == 0){
             printf("%s", userInput);
-        }else if(strcmp(userInput, "pwd") == 0){
+        }
+        if(strcmp(userInput, "pwd") == 0){
             getcwd(cwd, sizeof(cwd));
             printf("%s\n", cwd);
-        }else if(userInput[0] == 'c' && userInput[1] == 'd'){
+        }
+        if(userInput[0] == 'c' && userInput[1] == 'd'){
             getCD(userInput);
-        }else if(userInput[0] == 'c' && userInput[1] == 'd' && userInput[2] != ' '){
-            getCD(userInput);
-        }else if(userInput[0] == '#'){
+        }
+        if(userInput[0] == '#'){
             continue;
-        }else if(userInput[0] == '\0'){
+        }
+        if(userInput[0] == '\0'){
             continue;
-        }else{
+        }
+        if(strcmp(userInput, "exit") != 0 && strcmp(userInput, "status") != 0 && strcmp(userInput, "pwd") != 0 && (userInput[0] != '#' && userInput[0] == '\0')){
             printf("test2");
             printf("%s", userInput);
         }
