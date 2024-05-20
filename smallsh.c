@@ -1,47 +1,23 @@
 #include "smallsh.h"
 
+//I know it's not the best to use gobal varibles but this made this easier
+char homeDir[2049];
+
 //when user is ready to exit the shell
 void exitProgram(){
     exit(EXIT_SUCCESS);
 }
 
-// void getCD(char *userInput){
-//     char cwd[2049];
-//     getcwd(cwd, sizeof(cwd));
-//     char *home = strtok(cwd, "/");
-//     char *token = strtok(userInput, " ");
-//     token = strtok(NULL, " ");
-
-//     if(token  == NULL){
-//         chdir(home);
-//     }else{
-//         chdir(token);
-//     }
-
-
-//     printf("%s, in getCD\n", userInput);
-//     if(chdir(userInput) == 0){
-//         printf("success");
-//     }
-//     start();
-// }
-
 void getCD(char *userInput) {
-    char cwd[2049];
     char *token = strtok(userInput, " ");
-    token = strtok(NULL, " ");
-    char *home = getcwd(cwd, sizeof(cwd));
-
+    token = strtok(NULL, " ");                  //this will get the name of the directory the user want to move to 
+    
+    // No directory specified, change to home directory else change to the given path
     if (token == NULL) {
-        for(int i = 1; i < 4; i++){
-            printf("%d", i);
-            home = strtok(home, "/");
-        }
-        printf("%s", home);
-        (chdir(home) == 0);
-        
+        chdir(homeDir);
+    }else{
+        chdir(token);
     }
-    (chdir(token) == 0); 
 }
 
 void getStatus(){
@@ -91,6 +67,9 @@ void start(){
 
 int main(int argc, char *argv[]){
     printf("$ smallsh\n");
+    struct passwd *pw = getpwuid(getuid());                 //gets the home directory of the current user, pw built for c 
+    strncpy(homeDir, pw->pw_dir, sizeof(homeDir) - 1);      //uses the pw struct to acces the path to the home directory
+
     start();
     return 0;
 }
