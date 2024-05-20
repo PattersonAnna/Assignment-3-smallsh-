@@ -19,4 +19,5 @@ void start();
 void exitProgram();
 void getCD(char *path);
 void getStatus();
+void executingOtherCommands(char *userInput);
 #endif

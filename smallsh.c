@@ -23,6 +23,12 @@ void getCD(char *userInput) {
 void getStatus(){
     start();
 }
+
+void executingOtherCommands(char *userInput){
+    if(userInput )
+
+}
+
 /*correctly call calls the functions that handle the built-in commands and the function 
 that will hand the other commands*/
 void start(){
@@ -59,8 +65,7 @@ void start(){
             continue;
         }
         if(strcmp(userInput, "exit") != 0 && strcmp(userInput, "status") != 0 && strcmp(userInput, "pwd") != 0 && (userInput[0] != '#' && userInput[0] == '\0')){
-            printf("test2");
-            printf("%s", userInput);
+            executingOtherCommands(userInput);
         }
     }while(strcmp(userInput, "exit") != 0);
 }
