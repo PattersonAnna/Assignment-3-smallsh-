@@ -50,21 +50,44 @@ void getStatus(){
     start();
 }
 
-void executingOtherCommands(struct Command *current){
+void executingOtherCommands(struct Command *current) {
     pid_t newChild = fork();
 
-    if(newChild == 0){
-        if(current->arg[1] == NULL && current->input == NULL && current->output == NULL && current->background == false){
-        execlp(current->command, current->arg[0], NULL);
+    if (newChild == 0) {
+        // Child process
+        if(current->arg[1] == NULL && current->input == NULL && current->output == NULL && current->background == false) {
+            execlp(current->command, current->arg[0], NULL);
+        }else if(current->input != NULL && current->output != NULL) {
+            int inputFile = open(current->input, O_RDONLY);
+            int outputFile = open(current->output, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+            dup2(inputFile, STDIN_FILENO);
+            dup2(outputFile, STDOUT_FILENO);
+            close(inputFile);
+            close(outputFile);
+            execvp(current->command, current->arg);
+        }else if(current->input != NULL) {
+            int inputFile = open(current->input, O_RDONLY);
+            dup2(inputFile, STDIN_FILENO);
+            close(inputFile);
+            execvp(current->command, current->arg);
+        }else if(current->output != NULL) {
+            int inputFile = open(current->output, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+            dup2(inputFile, STDOUT_FILENO);
+            close(inputFile);
+            execvp(current->command, current->arg);
+        }else if(current->arg[1] != NULL) {
+            int inputFile = open(current->input, O_RDONLY);
+            dup2(inputFile, STDIN_FILENO);
+            close(inputFile);
+            execvp(current->command, current->arg);
         }
     }else{
-        //the parent waits for the child to finish running before allowing anyother processes to be run
+        // Parent process
+        int status;
         if (!current->background) {
             waitpid(newChild, &status, 0);
         }
-        freeCommand(current);
-
-    }
+    } 
 }
 
 void slitCommand(char *userInput) {
@@ -131,7 +154,6 @@ that will hand the other commands*/
 void start(){
     char userInput[2049];
     char cwd[2049];
-    printf("back to start");
 
     do{
         printf(":");
