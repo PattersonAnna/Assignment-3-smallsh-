@@ -20,6 +20,18 @@ int numArgs(struct Command *current){
     return num;
 }
 
+void ignoreCtrlC(int signum){
+    int saved_errno = errno;
+    int status;
+
+    printf("terminated by signal %d\n", WTERMSIG(status));
+    errno = saved_errno;
+}
+
+void ignore_pkill(int signal){
+    signal(SIGTERM, SIG_IGN);
+}
+
 void freeCommand(struct Command *commands){
     struct Command *current = commands;
     int args = numArgs(current);
@@ -54,6 +66,7 @@ void executingOtherCommands(struct Command *current) {
     //printCommand(current);
     pid_t newChild = fork();
     if (newChild == 0) {
+        signal(SIGTERM, SIG_IGN);
         // Child process
         if(current->arg[1] == NULL && current->input == NULL && current->output == NULL && current->background == false) {
             if(execlp(current->command, current->arg[0], NULL) == -1){
@@ -123,6 +136,7 @@ void background(struct Command *current){
     int childID = getpid();
 
     if(newChild == 0){
+
         if(current->background == true){
             setsid();
         }
@@ -243,11 +257,37 @@ void slitCommand(char *userInput) {
     }
     current->arg[argIndex] = NULL;
     if(current->background == true){
-        background(current);
+        checkBackground(current);
     }else{
-        executingOtherCommands(current);
+       executingOtherCommands(current);
     }
     freeCommand(current);
+}
+
+void checkBackground(struct Command *current){
+    char cwd[2049];
+
+    if(strcmp(current->command, "exit") == 0){
+        exitProgram();
+    }
+     else if(strcmp(current->command, "status") == 0 ){
+        getStatus();
+    }
+    else if(strcmp(current->command, "pwd") == 0){
+        getcwd(cwd, sizeof(cwd));
+        printf("%s\n", cwd);
+    }
+    else if(strcmp(current->command, "cd") == 0){
+        getCD(current->command );
+    }
+    else if((strcmp(current->command, "#") == 0)){
+        start();
+    }
+    else if((strcmp(current->command, "\0") == 0)){
+        start();
+    }else{
+        background(current);
+    }
 }
 
 
@@ -282,11 +322,10 @@ void start(){
         if (len > 0 && userInput[len - 1] == '\n') {
             userInput[len - 1] = '\0';
         }
-
         if(strcmp(userInput, "exit") == 0){
             exitProgram();
         }
-        if(strcmp(userInput, "status") == 0){
+        if(strcmp(userInput, "status") == 0 ){
             getStatus();
         }
         if(strcmp(userInput, "pwd") == 0){
@@ -310,6 +349,9 @@ void start(){
 
 int main(int argc, char *argv[]){
     printf("$ smallsh\n");
+    signal(SIGINT, ignoreCtrlC);
+    signal(SIGCHLD, ignore_pkill);
+    signal(SIGTERM, ignore_pkill);
     struct passwd *pw = getpwuid(getuid());                 //gets the home directory of the current user, pw built for c
     strncpy(homeDir, pw->pw_dir, sizeof(homeDir) - 1);      //uses the pw struct to acces the path to the home directory
     

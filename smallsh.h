@@ -13,6 +13,7 @@
 #include <fcntl.h>      // For file control options (open, O_RDONLY, etc.)
 #include <sys/stat.h>   // For file status and permissions (stat, S_ISREG, etc.)
 #include <errno.h>      // For error handling (errno) 
+#include <signal.h> // Include the signal header
 
 struct Command{
     char *command;
@@ -33,4 +34,7 @@ void freeCommand(struct Command *commands);
 int numArgs(struct Command *current);
 void background(struct Command *current);
 void handle_sigchld(int sig);
+void checkBackground(struct Command *current);
+void ignoreCtrlC(int signum);
+void ignore_pkill(int signal);
 #endif
