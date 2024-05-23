@@ -1,15 +1,18 @@
 #include "smallsh.h"
 
+
 //I know it's not the best to use gobal varibles but this made this easier
 char homeDir[2049];
 
-//exit status
-int status = 0;
+
+int currentStatus = 0;
+
 
 //when user is ready to exit the shell
 void exitProgram(){
     exit(EXIT_SUCCESS);
 }
+
 
 int numArgs(struct Command *current){
     int num = 0;
@@ -20,6 +23,7 @@ int numArgs(struct Command *current){
     }
     return num;
 }
+
 
 void freeCommand(struct Command *commands){
     struct Command *current = commands;
@@ -33,10 +37,11 @@ void freeCommand(struct Command *commands){
         free(current);
 }
 
+
 void getCD(char *userInput) {
     char *token = strtok(userInput, " ");
-    token = strtok(NULL, " ");                  //this will get the name of the directory the user want to move to 
-    
+    token = strtok(NULL, " ");                  //this will get the name of the directory the user want to move to
+   
     // No directory specified, change to home directory else change to the given path
     if (token == NULL) {
         chdir(homeDir);
@@ -46,18 +51,20 @@ void getCD(char *userInput) {
     start();
 }
 void getStatus(){
-    printf("exit value %d\n", status);
-    start();
+    if (WIFEXITED(currentStatus)) {
+        printf("exit value %d\n", WEXITSTATUS(currentStatus));
+    }
 }
 
 void executingOtherCommands(struct Command *current) {
+    //printCommand(current);
     pid_t newChild = fork();
 
     if (newChild == 0) {
         // Child process
         if(current->arg[1] == NULL && current->input == NULL && current->output == NULL && current->background == false) {
             execlp(current->command, current->arg[0], NULL);
-        }else if(current->input != NULL && current->output != NULL) {
+        } else if(current->input != NULL && current->output != NULL) {
             int inputFile = open(current->input, O_RDONLY);
             int outputFile = open(current->output, O_WRONLY | O_CREAT | O_TRUNC, 0644);
             dup2(inputFile, STDIN_FILENO);
@@ -65,47 +72,63 @@ void executingOtherCommands(struct Command *current) {
             close(inputFile);
             close(outputFile);
             execvp(current->command, current->arg);
-        }else if(current->input != NULL) {
-            int inputFile = open(current->input, O_RDONLY);
+        } else if(current->input != NULL) {
+                int inputFile = open(current->input, O_RDONLY);
+                dup2(inputFile, STDIN_FILENO);
+                close(inputFile);
+                execvp(current->command, current->arg);
+        } else if(current->output != NULL) {
+                int outputFile = open(current->output, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+                dup2(outputFile, STDOUT_FILENO);
+                close(outputFile);
+                execvp(current->command, current->arg);
+        } else if(current->arg[1] != NULL && strcmp(current->arg[1], "-f") != 0) {
+            int inputFile = open(current->arg[1], O_RDONLY);
             dup2(inputFile, STDIN_FILENO);
             close(inputFile);
             execvp(current->command, current->arg);
-        }else if(current->output != NULL) {
-            int inputFile = open(current->output, O_WRONLY | O_CREAT | O_TRUNC, 0644);
-            dup2(inputFile, STDOUT_FILENO);
-            close(inputFile);
-            execvp(current->command, current->arg);
-        }else if(current->arg[1] != NULL) {
-            int inputFile = open(current->input, O_RDONLY);
-            dup2(inputFile, STDIN_FILENO);
-            close(inputFile);
-            execvp(current->command, current->arg);
+        }else if(strcmp(current->arg[1], "-f") == 0){
+            struct stat buffer;
+            int state = stat(current->arg[2], &buffer);
+            if(state == 0 && S_ISREG(buffer.st_mode)){
+                exit(0);
+            }else{
+                exit(1);
+            }
+        }else{
+            start();
         }
-    }else{
+    } else if(newChild > 0) {
         // Parent process
-        int status;
+        int exitStatus;
         if (!current->background) {
-            waitpid(newChild, &status, 0);
+            waitpid(newChild, &exitStatus, 0);
+            currentStatus = exitStatus;
         }
-    } 
+    }
 }
+
 
 void slitCommand(char *userInput) {
     // Initialize the struct
     struct Command *current = malloc(sizeof(struct Command));
     int argIndex = 0;
 
+
     char *token = strtok(userInput, " ");
     current->command = calloc(strlen(token) + 1, sizeof(char));
     strcpy(current->command, token);
+
 
     current->arg[argIndex] = calloc(strlen(token) + 1, sizeof(char));
     strcpy(current->arg[argIndex], token);
     argIndex++;
 
+
     current->input = NULL;
     current->output = NULL;
     current->background = false;
+
 
     // The while loop splits up the user input and creates an array of arguments,
     // sets the input file and output file, and determines if the command should
@@ -129,10 +152,11 @@ void slitCommand(char *userInput) {
         }
         token = strtok(NULL, " ");
     }
-    current->arg[argIndex] = NULL; 
-    //printCommand(current);
+    current->arg[argIndex] = NULL;
+    // printCommand(current);
     executingOtherCommands(current);
 }
+
 
 void printCommand(struct Command *current) {
     printf("Command: %s\n", current->command);
@@ -149,21 +173,25 @@ void printCommand(struct Command *current) {
     printf("Background: %s\n", current->background ? "true" : "false");
 }
 
-/*correctly call calls the functions that handle the built-in commands and the function 
+
+/*correctly call calls the functions that handle the built-in commands and the function
 that will hand the other commands*/
 void start(){
     char userInput[2049];
     char cwd[2049];
 
+
     do{
         printf(":");
         fgets(userInput, sizeof(userInput), stdin);
+
 
         // Remove trailing newline character if present
         size_t len = strlen(userInput);
         if (len > 0 && userInput[len - 1] == '\n') {
             userInput[len - 1] = '\0';
         }
+
 
         if(strcmp(userInput, "exit") == 0){
             exitProgram();
@@ -192,9 +220,11 @@ void start(){
 
 int main(int argc, char *argv[]){
     printf("$ smallsh\n");
-    struct passwd *pw = getpwuid(getuid());                 //gets the home directory of the current user, pw built for c 
+    struct passwd *pw = getpwuid(getuid());                 //gets the home directory of the current user, pw built for c
     strncpy(homeDir, pw->pw_dir, sizeof(homeDir) - 1);      //uses the pw struct to acces the path to the home directory
-
     start();
     return 0;
 }
+
+
+
