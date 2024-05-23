@@ -1,18 +1,14 @@
 #include "smallsh.h"
 
-
 //I know it's not the best to use gobal varibles but this made this easier
 char homeDir[2049];
 
-
 int currentStatus = 0;
-
 
 //when user is ready to exit the shell
 void exitProgram(){
     exit(EXIT_SUCCESS);
 }
-
 
 int numArgs(struct Command *current){
     int num = 0;
@@ -23,7 +19,6 @@ int numArgs(struct Command *current){
     }
     return num;
 }
-
 
 void freeCommand(struct Command *commands){
     struct Command *current = commands;
@@ -36,7 +31,6 @@ void freeCommand(struct Command *commands){
         }
         free(current);
 }
-
 
 void getCD(char *userInput) {
     char *token = strtok(userInput, " ");
@@ -59,11 +53,15 @@ void getStatus(){
 void executingOtherCommands(struct Command *current) {
     //printCommand(current);
     pid_t newChild = fork();
-
     if (newChild == 0) {
         // Child process
         if(current->arg[1] == NULL && current->input == NULL && current->output == NULL && current->background == false) {
-            execlp(current->command, current->arg[0], NULL);
+            if(execlp(current->command, current->arg[0], NULL) == -1){
+                printf("%s : no such file or directory\n", current->command);
+                exit(1);
+            }else{
+                exit(0);
+            }
         } else if(current->input != NULL && current->output != NULL) {
             int inputFile = open(current->input, O_RDONLY);
             int outputFile = open(current->output, O_WRONLY | O_CREAT | O_TRUNC, 0644);
@@ -73,15 +71,27 @@ void executingOtherCommands(struct Command *current) {
             close(outputFile);
             execvp(current->command, current->arg);
         } else if(current->input != NULL) {
+            if(access(current->input,  F_OK) == 0){
                 int inputFile = open(current->input, O_RDONLY);
                 dup2(inputFile, STDIN_FILENO);
                 close(inputFile);
                 execvp(current->command, current->arg);
+                exit(0);
+            }else{
+                printf("cannot open %s for input\n", current->input);
+                exit(1);
+            }
         } else if(current->output != NULL) {
+            if(access(current->output,  F_OK) == 0){
                 int outputFile = open(current->output, O_WRONLY | O_CREAT | O_TRUNC, 0644);
                 dup2(outputFile, STDOUT_FILENO);
                 close(outputFile);
                 execvp(current->command, current->arg);
+                exit(0);
+            }else{
+                printf("cannot open %s for input\n", current->output);
+                exit(1);
+            }
         } else if(current->arg[1] != NULL && strcmp(current->arg[1], "-f") != 0) {
             int inputFile = open(current->arg[1], O_RDONLY);
             dup2(inputFile, STDIN_FILENO);
@@ -108,6 +118,87 @@ void executingOtherCommands(struct Command *current) {
     }
 }
 
+void background(struct Command *current){
+    pid_t newChild = fork();
+    int childID = getpid();
+
+    if(newChild == 0){
+        if(current->background == true){
+            setsid();
+        }
+
+        if(current->arg[1] == NULL && current->input == NULL && current->output == NULL && current->background == false) {
+            if(execlp(current->command, current->arg[0], NULL) == -1){
+                printf("%s : no such file or directory\n", current->command);
+                exit(1);
+            }else{
+                exit(0);
+            }
+        } else if(current->input != NULL && current->output != NULL) {
+            int inputFile = open(current->input, O_RDONLY);
+            int outputFile = open(current->output, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+            dup2(inputFile, STDIN_FILENO);
+            dup2(outputFile, STDOUT_FILENO);
+            close(inputFile);
+            close(outputFile);
+            execvp(current->command, current->arg);
+        } else if(current->input != NULL) {
+            if(access(current->input,  F_OK) == 0){
+                int inputFile = open(current->input, O_RDONLY);
+                dup2(inputFile, STDIN_FILENO);
+                close(inputFile);
+                execvp(current->command, current->arg);
+                exit(0);
+            }else{
+                printf("cannot open %s for input\n", current->input);
+                exit(1);
+            }
+        } else if(current->output != NULL) {
+            if(access(current->output,  F_OK) == 0){
+                int outputFile = open(current->output, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+                dup2(outputFile, STDOUT_FILENO);
+                close(outputFile);
+                execvp(current->command, current->arg);
+                exit(0);
+            }else{
+                printf("cannot open %s for input\n", current->output);
+                exit(1);
+            }
+        } else if(current->arg[1] != NULL && strcmp(current->arg[1], "-f") != 0) {
+            int inputFile = open(current->arg[1], O_RDONLY);
+            dup2(inputFile, STDIN_FILENO);
+            close(inputFile);
+            execvp(current->command, current->arg);
+        }else if(strcmp(current->arg[1], "-f") == 0){
+            struct stat buffer;
+            int state = stat(current->arg[2], &buffer);
+            if(state == 0 && S_ISREG(buffer.st_mode)){
+                exit(0);
+            }else{
+                exit(1);
+            }
+        }else{
+            start();
+        }
+        
+    }else if (newChild > 0) {
+        printf("background pid is %d\n", newChild);
+    }
+}
+
+void handle_sigchld(int sig){
+    int saved_errno = errno;
+    pid_t pid;
+    int status;
+    while ((pid = waitpid(-1, &status, WNOHANG)) > 0) {
+        if (WIFEXITED(status)) {
+            printf("background pid %d is done: exit value %d\n", pid, WEXITSTATUS(status));
+        } else if (WIFSIGNALED(status)) {
+            printf("background pid %d is done: terminated by signal %d\n", pid, WTERMSIG(status));
+        }
+    }
+    errno = saved_errno;
+}
 
 void slitCommand(char *userInput) {
     // Initialize the struct
@@ -124,11 +215,9 @@ void slitCommand(char *userInput) {
     strcpy(current->arg[argIndex], token);
     argIndex++;
 
-
     current->input = NULL;
     current->output = NULL;
     current->background = false;
-
 
     // The while loop splits up the user input and creates an array of arguments,
     // sets the input file and output file, and determines if the command should
@@ -153,8 +242,12 @@ void slitCommand(char *userInput) {
         token = strtok(NULL, " ");
     }
     current->arg[argIndex] = NULL;
-    // printCommand(current);
-    executingOtherCommands(current);
+    if(current->background == true){
+        background(current);
+    }else{
+        executingOtherCommands(current);
+    }
+    freeCommand(current);
 }
 
 
@@ -180,18 +273,15 @@ void start(){
     char userInput[2049];
     char cwd[2049];
 
-
     do{
         printf(":");
         fgets(userInput, sizeof(userInput), stdin);
-
 
         // Remove trailing newline character if present
         size_t len = strlen(userInput);
         if (len > 0 && userInput[len - 1] == '\n') {
             userInput[len - 1] = '\0';
         }
-
 
         if(strcmp(userInput, "exit") == 0){
             exitProgram();
@@ -222,6 +312,17 @@ int main(int argc, char *argv[]){
     printf("$ smallsh\n");
     struct passwd *pw = getpwuid(getuid());                 //gets the home directory of the current user, pw built for c
     strncpy(homeDir, pw->pw_dir, sizeof(homeDir) - 1);      //uses the pw struct to acces the path to the home directory
+    
+    // Set up SIGCHLD handler
+    struct sigaction sa;
+    sa.sa_handler = handle_sigchld;
+    sigemptyset(&sa.sa_mask);
+    sa.sa_flags = SA_RESTART | SA_NOCLDSTOP;
+    if (sigaction(SIGCHLD, &sa, NULL) == -1) {
+        perror("sigaction");
+        exit(1);
+    }
+
     start();
     return 0;
 }
