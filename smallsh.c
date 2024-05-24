@@ -21,19 +21,24 @@ int numArgs(struct Command *current){
     }
     return num;
 }
-/*
-void ignoreCtrlC(int signum){
-    int saved_errno = errno;
+
+//allows for ^c to be used on a child process and prints the correct message with status num
+void childIgnoreCtrlC(int signum){
     int status;
 
-    printf("terminated by signal %d\n", WTERMSIG(status));
-    errno = saved_errno;
+    printf("terminated by signal %d\n", WTERMSIG(status));  //WTERMSIG used to get the signal number
 }
 
-void ignore_pkill(int signal){
-    signal(SIGTERM, SIG_IGN);
+//for parent and background child
+void handleSigint(int signum){
+    //does nothing for the parent and the background child
 }
-*/
+
+
+// void ignore_pkill(int signal){
+//     signal(SIGTERM, SIG_IGN);
+// }
+
 
 //frees all of the memory allocated during the spliting of the command input
 void freeCommand(struct Command *commands){
@@ -71,16 +76,17 @@ void getStatus(){
     }
 }
 
+//used for pirnting the message when the background process has finished running
 void checkBackgroundStatus(){
     int status;
-    pid_t pid = waitpid(-1, &status, WNOHANG);
+    pid_t pid = waitpid(-1, &status, WNOHANG);  //waitpid waits for any child process to finish, &status stores the status and, WNOHANG prevents it from waiting for a child t finish
     while (pid > 0) {
         if (WIFEXITED(status)) {
-            printf("background pid %d is done: exit value %d\n", pid, WEXITSTATUS(status));
+            printf("background pid %d is done: exit value %d\n", pid, WEXITSTATUS(status)); //WEXITSTATUS gets the exit status of the child process
         } else if (WIFSIGNALED(status)) {
-            printf("background pid %d is done: terminated by signal %d\n", pid, WTERMSIG(status));
+            printf("background pid %d is done: terminated by signal %d\n", pid, WTERMSIG(status));  //WTERMSIG used to get the signal number
         }
-        pid = waitpid(-1, &status, WNOHANG);
+        pid = waitpid(-1, &status, WNOHANG);    //this stores the process id of the child that just finished running
     }
 
 }
@@ -88,11 +94,12 @@ void checkBackgroundStatus(){
 //used to run forground commands
 void executingOtherCommands(struct Command *current) {
     pid_t newChild = fork();
+    signal(SIGINT, childIgnoreCtrlC);    //custom signal handler so that ^c works ona child process
     if (newChild == 0) {    // if a child process was succesfully created should be 0
-        //signal(SIGTERM, SIG_IGN);
         if(current->arg[1] == NULL && current->input == NULL && current->output == NULL && current->background == false) { 
             if(execlp(current->command, current->arg[0], NULL) == -1){  //if a command runs successfully, it returns 0
                 printf("%s : no such file or directory\n", current->command);   //command was unsuccessful so an error is printed and exit status is set to 1
+                fflush(stdout);
                 exit(1);
             }else{
                 exit(0);
@@ -114,6 +121,7 @@ void executingOtherCommands(struct Command *current) {
                 exit(0);
             }else{
                 printf("cannot open %s for input\n", current->input);
+                fflush(stdout);
                 exit(1);
             }
         } else if(current->output != NULL) {
@@ -155,9 +163,18 @@ void background(struct Command *current){
     int childID = getpid();
 
     if(newChild == 0){
+        signal(SIGINT, handleSigint);
         if(current->arg[1] == NULL && current->input == NULL && current->output == NULL && current->background == true) {
+            int input = open("/dev/null", O_RDONLY);
+            int output = open("/dev/null", O_WRONLY);
+            dup2(input, STDIN_FILENO);
+            dup2(output, STDOUT_FILENO);
+            close(input);
+            close(output);
+
             if(execlp(current->command, current->arg[0], NULL) == -1){
                 printf("%s : no such file or directory\n", current->command);
+                fflush(stdout);
                 exit(1);
             }else{
                 exit(0);
@@ -179,19 +196,15 @@ void background(struct Command *current){
                 exit(0);
             }else{
                 printf("cannot open %s for input\n", current->input);
+                fflush(stdout);
                 exit(1);
             }
         } else if(current->output != NULL) {
-            if(access(current->output,  F_OK) == 0){
-                int outputFile = open(current->output, O_WRONLY | O_CREAT | O_TRUNC, 0644);
-                dup2(outputFile, STDOUT_FILENO);
-                close(outputFile);
-                execvp(current->command, current->arg);
-                exit(0);
-            }else{
-                printf("cannot open %s for input\n", current->output);
-                exit(1);
-            }
+            int outputFile = open(current->output, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+            dup2(outputFile, STDOUT_FILENO);
+            close(outputFile);
+            execvp(current->command, current->arg);
+            exit(0);
         } else if(current->arg[1] != NULL && strcmp(current->arg[1], "-f") != 0) {
             int inputFile = open(current->arg[1], O_RDONLY);
             dup2(inputFile, STDIN_FILENO);
@@ -211,6 +224,7 @@ void background(struct Command *current){
         
     }else if (newChild > 0) {
         printf("background pid is %d\n", newChild);
+        fflush(stdout);
     }
 }
 
@@ -317,8 +331,8 @@ void start(){
     char cwd[2049];
 
     do{
-        printf(":");
         checkBackgroundStatus();
+        printf(":");
         fgets(userInput, sizeof(userInput), stdin);
 
         // Remove trailing newline character if present
@@ -352,6 +366,7 @@ void start(){
 }
 
 int main(int argc, char *argv[]){
+    signal(SIGINT, handleSigint);
     printf("$ smallsh\n");
 
     struct passwd *pw = getpwuid(getuid());                 //gets the home directory of the current user, pw built for c

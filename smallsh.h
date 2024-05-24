@@ -35,8 +35,9 @@ int numArgs(struct Command *current);
 void background(struct Command *current);
 void handle_sigchld(int sig);
 void checkBackgroundStatus();
+void childIgnoreCtrlC(int signum);
+void handleSigint(int signum);
 
-void ignoreCtrlC(int signum);
 void ignore_pkill(int signal);
 
 #endif
