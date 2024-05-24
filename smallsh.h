@@ -40,5 +40,6 @@ void handleSigint(int signum);
 void ignore_pkill(int signal);
 void customCtrlz(int signum);
 void checkExpansion(char *userInput);
+void signals();
 
 #endif

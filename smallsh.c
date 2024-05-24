@@ -3,7 +3,7 @@
 //I know it's not the best to use gobal varibles but this made this easier
 char homeDir[2049];
 
-//global variable to keep track of the status
+//global variable to keep track of the statuses
 int currentStatus = 0;
 
 int terminatedStatus = 0;
@@ -38,6 +38,7 @@ void handleSigint(int signum){
     //does nothing for the parent and the background child
 }
 
+//custom SIGTSTP for the parent process, when SIGTSTP is used chnages the status to 1 and process are all run in the Foreground
 void customCtrlz(int signum){
     if(backgroundStatus == 0){
         backgroundStatus = 1;
@@ -45,21 +46,30 @@ void customCtrlz(int signum){
     }else if(backgroundStatus == 1){
         backgroundStatus = 0;
         printf("Exiting foreground-only mode\n");
-    }
-    
+    }  
+}
+
+void signals(){
+    if(backgroundStatus == 0){
+        backgroundStatus = 1;
+        printf("Entering foreground-only mode (& is now ignored)\n");
+    }else if(backgroundStatus == 1){
+        backgroundStatus = 0;
+        printf("Exiting foreground-only mode\n");
+    }  
 }
 
 //frees all of the memory allocated during the spliting of the command input
 void freeCommand(struct Command *commands){
     struct Command *current = commands;
     int args = numArgs(current);
-        free(current->command);
-        free(current->input);
-        free(current->output);
-        for(int i = 0; i < args; i++){
-            free(current->arg[i]);
-        }
-        free(current);
+    free(current->command);
+    free(current->input);
+    free(current->output);
+    for(int i = 0; i < args; i++){
+        free(current->arg[i]);
+    }
+    free(current);
 }
 
 //used for cd check if path it given, if not return to home directory, ignores &
@@ -101,7 +111,6 @@ void checkBackgroundStatus(){
         }
         pid = waitpid(-1, &exitStatus, WNOHANG);    //this stores the process id of the child that just finished running
     }
-
 }
 
 //used to run forground commands
@@ -118,7 +127,7 @@ void executingOtherCommands(struct Command *current) {
             }else{
                 exit(0);
             }
-        } else if(current->input != NULL && current->output != NULL) {  //if an input and out file are given, open both
+        }else if(current->input != NULL && current->output != NULL) {  //if an input and out file are given, open both
             int inputFile = open(current->input, O_RDONLY); //read only
             int outputFile = open(current->output, O_WRONLY | O_CREAT | O_TRUNC, 0644);
             dup2(inputFile, STDIN_FILENO);  //dup2 is used so standard input will read from the given file
@@ -126,7 +135,7 @@ void executingOtherCommands(struct Command *current) {
             close(inputFile);
             close(outputFile);
             execvp(current->command, current->arg); //preforms the commands as a child process
-        } else if(current->input != NULL) {
+        }else if(current->input != NULL) {
             if(access(current->input,  F_OK) == 0){ //checks that the file exists if not then an error is printed
                 int inputFile = open(current->input, O_RDONLY);
                 dup2(inputFile, STDIN_FILENO);
@@ -138,13 +147,13 @@ void executingOtherCommands(struct Command *current) {
                 fflush(stdout);
                 exit(1);
             }
-        } else if(current->output != NULL) {
+        }else if(current->output != NULL) {
             int outputFile = open(current->output, O_WRONLY | O_CREAT | O_TRUNC, 0644); //write only, create if it doesn't exist, create file of contence if already open
             dup2(outputFile, STDOUT_FILENO);
             close(outputFile);
             execvp(current->command, current->arg);
             exit(0);
-        } else if(current->arg[1] != NULL && strcmp(current->arg[1], "-f") != 0) {
+        }else if(current->arg[1] != NULL && strcmp(current->arg[1], "-f") != 0) {
             int inputFile = open(current->arg[1], O_RDONLY);
             dup2(inputFile, STDIN_FILENO);
             close(inputFile);
@@ -160,7 +169,7 @@ void executingOtherCommands(struct Command *current) {
         }else{
             start();
         }
-    } else if(newChild > 0) {   //checks the child process has finished
+    }else if(newChild > 0) {   //checks the child process has finished
         // Parent process
         int exitStatus;
         if (!current->background) {
@@ -194,7 +203,7 @@ void background(struct Command *current){
             }else{
                 exit(0);
             }
-        } else if(current->input != NULL && current->output != NULL) {
+        }else if(current->input != NULL && current->output != NULL) {
             int inputFile = open(current->input, O_RDONLY);
             int outputFile = open(current->output, O_WRONLY | O_CREAT | O_TRUNC, 0644);
             dup2(inputFile, STDIN_FILENO);
@@ -202,7 +211,7 @@ void background(struct Command *current){
             close(inputFile);
             close(outputFile);
             execvp(current->command, current->arg);
-        } else if(current->input != NULL) {
+        }else if(current->input != NULL) {
             if(access(current->input,  F_OK) == 0){
                 int inputFile = open(current->input, O_RDONLY);
                 dup2(inputFile, STDIN_FILENO);
@@ -214,13 +223,13 @@ void background(struct Command *current){
                 fflush(stdout);
                 exit(1);
             }
-        } else if(current->output != NULL) {
+        }else if(current->output != NULL) {
             int outputFile = open(current->output, O_WRONLY | O_CREAT | O_TRUNC, 0644);
             dup2(outputFile, STDOUT_FILENO);
             close(outputFile);
             execvp(current->command, current->arg);
             exit(0);
-        } else if(current->arg[1] != NULL && strcmp(current->arg[1], "-f") != 0) {
+        }else if(current->arg[1] != NULL && strcmp(current->arg[1], "-f") != 0) {
             int inputFile = open(current->arg[1], O_RDONLY);
             dup2(inputFile, STDIN_FILENO);
             close(inputFile);
@@ -235,8 +244,7 @@ void background(struct Command *current){
             }
         }else{
             start();
-        }
-        
+        }      
     }else if (newChild > 0) {
         printf("background pid is %d\n", newChild);
         fflush(stdout);
@@ -249,21 +257,16 @@ void checkBackground(struct Command *current){
 
     if(strcmp(current->command, "exit") == 0){
         exitProgram();
-    }
-     else if(strcmp(current->command, "status") == 0 ){
+    }else if(strcmp(current->command, "status") == 0 ){
         getStatus();
-    }
-    else if(strcmp(current->command, "pwd") == 0){
+    }else if(strcmp(current->command, "pwd") == 0){
         getcwd(cwd, sizeof(cwd));
         printf("%s\n", cwd);
-    }
-    else if(strcmp(current->command, "cd") == 0){
+    }else if(strcmp(current->command, "cd") == 0){
         getCD(current->command );
-    }
-    else if((strcmp(current->command, "#") == 0)){
+    }else if((strcmp(current->command, "#") == 0)){
         start();
-    }
-    else if((strcmp(current->command, "\0") == 0)){
+    }else if((strcmp(current->command, "\0") == 0)){
         start();
     }else{
         background(current);
@@ -277,11 +280,9 @@ void slitCommand(char *userInput) {
     struct Command *current = malloc(sizeof(struct Command));   //allocates mem for the whole struct
     int argIndex = 0;
 
-
     char *token = strtok(userInput, " ");   //takes the first argument
     current->command = calloc(strlen(token) + 1, sizeof(char)); //allocated mem for command
     strcpy(current->command, token);    //copes the token into command 
-
 
     current->arg[argIndex] = calloc(strlen(token) + 1, sizeof(char));   //sets the command as the first argument
     strcpy(current->arg[argIndex], token);
@@ -300,13 +301,13 @@ void slitCommand(char *userInput) {
             token = strtok(NULL, " ");
             current->input = calloc(strlen(token) + 1, sizeof(char));
             strcpy(current->input, token);
-        } else if (strcmp(token, ">") == 0) {
+        }else if (strcmp(token, ">") == 0) {
             token = strtok(NULL, " ");
             current->output = calloc(strlen(token) + 1, sizeof(char));
             strcpy(current->output, token);
-        } else if (strcmp(token, "&") == 0) {
+        }else if (strcmp(token, "&") == 0) {
             current->background = true;
-        } else {
+        }else {
             current->arg[argIndex] = calloc(strlen(token) + 1, sizeof(char));
             strcpy(current->arg[argIndex], token);
             argIndex++; // Increment argIndex for each valid argument
@@ -320,9 +321,14 @@ void slitCommand(char *userInput) {
     }else{
        executingOtherCommands(current);
     }
+
+    if(current->arg[1] != NULL){
+        if(strcmp(current->arg[1], "-SIGTSTP") == 0){
+            signals();
+        }
+    }
     freeCommand(current);
 }
-
 
 void printCommand(struct Command *current) {
     printf("Command: %s\n", current->command);
@@ -339,28 +345,21 @@ void printCommand(struct Command *current) {
     printf("Background: %s\n", current->background ? "true" : "false");
 }
 
-void checkExpansion(char *userInput) {
-    char result[2049]; // Buffer to hold the result
-    char *ptr; // Pointer for strstr function result
-    char pidStr[15]; // String to store process ID
-
-    // Get the process ID and convert it to string
-    pid_t pid = getpid();
-    snprintf(pidStr, sizeof(pidStr), "%d", pid);
-
-    // Copy userInput to result
-    strcpy(result, userInput);
-
-    // Search for "$$" in result
-    while ((ptr = strstr(result, "$$")) != NULL) {
-        // Replace "$$" with process ID in result
-        strcpy(ptr, pidStr);
-        // Shift result to remove extra characters
-        memmove(ptr + strlen(pidStr), ptr + 2, strlen(ptr + 2) + 1);
+void checkExpansion(char *userInput){
+    int i = 0;
+    pid_t pid = getpid();   //get the process id
+    while (userInput[i] != '\0') {  //loops throught the array of chars from userInput
+        if (userInput[i] == '$' && userInput[i + 1] == '$') {   //checks for 2 $ right next to each other
+            char pid_str[20]; //makes the pid a char so it can be replace the $$ in the userInput
+            sprintf(pid_str, "%d", pid);    //converts pid to string and stores it in pid_str
+            
+            memmove(&userInput[i + strlen(pid_str)], &userInput[i + 2], strlen(userInput) - i - 1);  //adds the ip to the userInput
+            memcpy(&userInput[i], pid_str, strlen(pid_str));    //copies the new string to the userinput 
+            i += strlen(pid_str);   //moves the index after the ip was inserted
+        }else{
+            i++;
+        }
     }
-
-    // Copy the modified result back to userInput
-    strcpy(userInput, result);
 }
 
 
@@ -370,6 +369,7 @@ void start(){
     char userInput[2049];
     char cwd[2049];
     char temp[2049];
+    pid_t pid = getpid();
 
     do{
         checkBackgroundStatus();
@@ -378,10 +378,9 @@ void start(){
         //signal(SIGINT, handleSigintBackgroundChild);
 
         checkExpansion(userInput);
-        printf("%s", userInput);
         // Remove trailing newline character if present
         size_t len = strlen(userInput);
-        if (len > 0 && userInput[len - 1] == '\n') {
+        if(len > 0 && userInput[len - 1] == '\n') {
             userInput[len - 1] = '\0';
         }
         if(strcmp(userInput, "exit") == 0){
