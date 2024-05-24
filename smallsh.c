@@ -8,6 +8,8 @@ int currentStatus = 0;
 
 int terminatedStatus = 0;
 
+int backgroundStatus = 0;
+
 //when user is ready to exit the shell
 void exitProgram(){
     exit(EXIT_SUCCESS);
@@ -26,25 +28,26 @@ int numArgs(struct Command *current){
 
 //allows for ^c to be used on a child process and prints the correct message with status num
 void childIgnoreCtrlC(int signum){
-    int status;
     terminatedStatus = SIGINT;
     printf("terminated by signal %d\n", SIGINT);  //WTERMSIG used to get the signal number
 }
 
 //for parent and background child
 void handleSigint(int signum){
+    printf("\nCtrl+C ignored in the main process.\n");
     //does nothing for the parent and the background child
 }
 
-void handleSigintBackgroundChild(int signum){
-    //does nothing for the parent and the background child
+void customCtrlz(int signum){
+    if(backgroundStatus == 0){
+        backgroundStatus = 1;
+        printf("Entering foreground-only mode (& is now ignored)\n");
+    }else if(backgroundStatus == 1){
+        backgroundStatus = 0;
+        printf("Exiting foreground-only mode\n");
+    }
+    
 }
-
-
-// void ignore_pkill(int signal){
-//     signal(SIGTERM, SIG_IGN);
-// }
-
 
 //frees all of the memory allocated during the spliting of the command input
 void freeCommand(struct Command *commands){
@@ -77,8 +80,8 @@ void getCD(char *userInput) {
 
 //checks the status if commands are succesful they return 0, if not then they return 1
 void getStatus(){
-    if(termantedStatus != 0){
-        printf("terminated by signal %d\n", termanatedStatus);  //WTERMSIG used to get the signal number
+    if(terminatedStatus != 0){
+        printf("terminated by signal %d\n", terminatedStatus);  //WTERMSIG used to get the signal number
     }else{
         if (WIFEXITED(currentStatus)) {     //WIFEXITED checks if the child exited normaly
             printf("exit value %d\n", WEXITSTATUS(currentStatus));  //WEXITSTATUS gets the exit status of the child process
@@ -88,15 +91,15 @@ void getStatus(){
 
 //used for pirnting the message when the background process has finished running
 void checkBackgroundStatus(){
-    int status;
-    pid_t pid = waitpid(-1, &status, WNOHANG);  //waitpid waits for any child process to finish, &status stores the status and, WNOHANG prevents it from waiting for a child t finish
+    int exitStatus;
+    pid_t pid = waitpid(-1, &exitStatus, WNOHANG);  //waitpid waits for any child process to finish, &status stores the status and, WNOHANG prevents it from waiting for a child t finish
     while (pid > 0) {
-        if (WIFEXITED(status)) {
-            printf("background pid %d is done: exit value %d\n", pid, WEXITSTATUS(status)); //WEXITSTATUS gets the exit status of the child process
-        } else if (WIFSIGNALED(status)) {
-            printf("background pid %d is done: terminated by signal %d\n", pid, WTERMSIG(status));  //WTERMSIG used to get the signal number
+        if (WIFEXITED(exitStatus)) {
+            printf("background pid %d is done: exit value %d\n", pid, WEXITSTATUS(exitStatus)); //WEXITSTATUS gets the exit status of the child process
+        } else if (WIFSIGNALED(exitStatus)) {
+            printf("background pid %d is done: terminated by signal %d\n", pid, WTERMSIG(exitStatus));  //WTERMSIG used to get the signal number
         }
-        pid = waitpid(-1, &status, WNOHANG);    //this stores the process id of the child that just finished running
+        pid = waitpid(-1, &exitStatus, WNOHANG);    //this stores the process id of the child that just finished running
     }
 
 }
@@ -105,6 +108,7 @@ void checkBackgroundStatus(){
 void executingOtherCommands(struct Command *current) {
     pid_t newChild = fork();
     signal(SIGINT, childIgnoreCtrlC);    //custom signal handler so that ^c works ona child process
+    signal(SIGTSTP, SIG_IGN);
     if (newChild == 0) {    // if a child process was succesfully created should be 0
         if(current->arg[1] == NULL && current->input == NULL && current->output == NULL && current->background == false) { 
             if(execlp(current->command, current->arg[0], NULL) == -1){  //if a command runs successfully, it returns 0
@@ -170,7 +174,8 @@ void executingOtherCommands(struct Command *current) {
 //same as executingOtherCommands() but for background use
 void background(struct Command *current){
     pid_t newChild = fork();
-    signal(SIGINT, handleSigintBackgroundChild);
+    signal(SIGINT, SIG_IGN); // Ignore SIGINT
+    signal(SIGTSTP, SIG_IGN);   //ignore SIGTSTP
     int childID = getpid();
 
     if(newChild == 0){
@@ -238,6 +243,7 @@ void background(struct Command *current){
     }
 }
 
+//function ignore & if it comes after a built in command
 void checkBackground(struct Command *current){
     char cwd[2049];
 
@@ -268,16 +274,16 @@ void checkBackground(struct Command *current){
 if a > the follow string is stored as the output filename, < does the same thing, & sets the backgroud value true*/
 void slitCommand(char *userInput) {
     // Initialize the struct
-    struct Command *current = malloc(sizeof(struct Command));
+    struct Command *current = malloc(sizeof(struct Command));   //allocates mem for the whole struct
     int argIndex = 0;
 
 
-    char *token = strtok(userInput, " ");
-    current->command = calloc(strlen(token) + 1, sizeof(char));
-    strcpy(current->command, token);
+    char *token = strtok(userInput, " ");   //takes the first argument
+    current->command = calloc(strlen(token) + 1, sizeof(char)); //allocated mem for command
+    strcpy(current->command, token);    //copes the token into command 
 
 
-    current->arg[argIndex] = calloc(strlen(token) + 1, sizeof(char));
+    current->arg[argIndex] = calloc(strlen(token) + 1, sizeof(char));   //sets the command as the first argument
     strcpy(current->arg[argIndex], token);
     argIndex++;
 
@@ -288,8 +294,8 @@ void slitCommand(char *userInput) {
     // The while loop splits up the user input and creates an array of arguments,
     // sets the input file and output file, and determines if the command should
     // be run in the background with a boolean value
-    token = strtok(NULL, " ");
-    while (token != NULL) {
+    token = strtok(NULL, " ");  //moves token to the next argument in the user input
+    while (token != NULL) {     //loops through until all of the elements in the user input have been assigned to the correct struct element 
         if (strcmp(token, "<") == 0) {
             token = strtok(NULL, " ");
             current->input = calloc(strlen(token) + 1, sizeof(char));
@@ -309,7 +315,7 @@ void slitCommand(char *userInput) {
     }
     current->arg[argIndex] = NULL;
     //printCommand(current);
-    if(current->background == true){
+    if(current->background == true && backgroundStatus == 0){    //if user enter & run the command in the background
         checkBackground(current);
     }else{
        executingOtherCommands(current);
@@ -333,12 +339,37 @@ void printCommand(struct Command *current) {
     printf("Background: %s\n", current->background ? "true" : "false");
 }
 
+void checkExpansion(char *userInput) {
+    char result[2049]; // Buffer to hold the result
+    char *ptr; // Pointer for strstr function result
+    char pidStr[15]; // String to store process ID
+
+    // Get the process ID and convert it to string
+    pid_t pid = getpid();
+    snprintf(pidStr, sizeof(pidStr), "%d", pid);
+
+    // Copy userInput to result
+    strcpy(result, userInput);
+
+    // Search for "$$" in result
+    while ((ptr = strstr(result, "$$")) != NULL) {
+        // Replace "$$" with process ID in result
+        strcpy(ptr, pidStr);
+        // Shift result to remove extra characters
+        memmove(ptr + strlen(pidStr), ptr + 2, strlen(ptr + 2) + 1);
+    }
+
+    // Copy the modified result back to userInput
+    strcpy(userInput, result);
+}
+
 
 /*correctly call calls the functions that handle the built-in commands and the function
 that will hand the other commands*/
 void start(){
     char userInput[2049];
     char cwd[2049];
+    char temp[2049];
 
     do{
         checkBackgroundStatus();
@@ -346,6 +377,8 @@ void start(){
         fgets(userInput, sizeof(userInput), stdin);
         //signal(SIGINT, handleSigintBackgroundChild);
 
+        checkExpansion(userInput);
+        printf("%s", userInput);
         // Remove trailing newline character if present
         size_t len = strlen(userInput);
         if (len > 0 && userInput[len - 1] == '\n') {
@@ -370,6 +403,9 @@ void start(){
         if(userInput[0] == '\0'){
             continue;
         }
+        if(strncmp(userInput, "pkill", 6) == 0) {
+            //executeCommand(userInput);
+        }
         if(strcmp(userInput, "exit") != 0 && strcmp(userInput, "status") != 0 && strcmp(userInput, "pwd") != 0 && (userInput[0] != '#' && userInput[0] != '\0')){
             slitCommand(userInput);
         }
@@ -378,6 +414,7 @@ void start(){
 
 int main(int argc, char *argv[]){
     signal(SIGINT, handleSigint);
+    signal(SIGTSTP, customCtrlz); 
     printf("$ smallsh\n");
 
     struct passwd *pw = getpwuid(getuid());                 //gets the home directory of the current user, pw built for c

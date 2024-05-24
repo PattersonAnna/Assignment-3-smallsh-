@@ -37,8 +37,8 @@ void handle_sigchld(int sig);
 void checkBackgroundStatus();
 void childIgnoreCtrlC(int signum);
 void handleSigint(int signum);
-void handleSigintBackgroundChild(int signum);
-
 void ignore_pkill(int signal);
+void customCtrlz(int signum);
+void checkExpansion(char *userInput);
 
 #endif
