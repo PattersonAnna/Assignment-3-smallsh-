@@ -6,6 +6,8 @@ char homeDir[2049];
 //global variable to keep track of the status
 int currentStatus = 0;
 
+int terminatedStatus = 0;
+
 //when user is ready to exit the shell
 void exitProgram(){
     exit(EXIT_SUCCESS);
@@ -25,12 +27,16 @@ int numArgs(struct Command *current){
 //allows for ^c to be used on a child process and prints the correct message with status num
 void childIgnoreCtrlC(int signum){
     int status;
-
-    printf("terminated by signal %d\n", WTERMSIG(status));  //WTERMSIG used to get the signal number
+    terminatedStatus = SIGINT;
+    printf("terminated by signal %d\n", SIGINT);  //WTERMSIG used to get the signal number
 }
 
 //for parent and background child
 void handleSigint(int signum){
+    //does nothing for the parent and the background child
+}
+
+void handleSigintBackgroundChild(int signum){
     //does nothing for the parent and the background child
 }
 
@@ -71,8 +77,12 @@ void getCD(char *userInput) {
 
 //checks the status if commands are succesful they return 0, if not then they return 1
 void getStatus(){
-    if (WIFEXITED(currentStatus)) {     //WIFEXITED checks if the child exited normaly
-        printf("exit value %d\n", WEXITSTATUS(currentStatus));  //WEXITSTATUS gets the exit status of the child process
+    if(termantedStatus != 0){
+        printf("terminated by signal %d\n", termanatedStatus);  //WTERMSIG used to get the signal number
+    }else{
+        if (WIFEXITED(currentStatus)) {     //WIFEXITED checks if the child exited normaly
+            printf("exit value %d\n", WEXITSTATUS(currentStatus));  //WEXITSTATUS gets the exit status of the child process
+        }
     }
 }
 
@@ -160,10 +170,10 @@ void executingOtherCommands(struct Command *current) {
 //same as executingOtherCommands() but for background use
 void background(struct Command *current){
     pid_t newChild = fork();
+    signal(SIGINT, handleSigintBackgroundChild);
     int childID = getpid();
 
     if(newChild == 0){
-        signal(SIGINT, handleSigint);
         if(current->arg[1] == NULL && current->input == NULL && current->output == NULL && current->background == true) {
             int input = open("/dev/null", O_RDONLY);
             int output = open("/dev/null", O_WRONLY);
@@ -334,6 +344,7 @@ void start(){
         checkBackgroundStatus();
         printf(":");
         fgets(userInput, sizeof(userInput), stdin);
+        //signal(SIGINT, handleSigintBackgroundChild);
 
         // Remove trailing newline character if present
         size_t len = strlen(userInput);
